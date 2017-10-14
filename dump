@@ -1,0 +1,38 @@
+#!/bin/sh
+
+set -e
+
+error() {
+  echo "$*" >&2
+  exit 1
+}
+usage() {
+  error "Use me like this: $(basename "$0") file-or-dir"
+}
+curl_escape() {
+  # escape '"' and '\', see man curl
+  echo "$*" | sed -r 's/(["\])/\\\1/g'
+}
+
+SOURCE="$1"
+CURL_OUT="$(mktemp -t dump.XXXXXXXXXX)"
+# add "-F token=yoursecrethere" if your instance requires a token
+CURL="curl -# -o $CURL_OUT"
+HOST='https://gpldr.in/'
+trap 'rm -f "$CURL_OUT"' EXIT
+
+test -z "$2" || usage # maximum one argument
+if [ -z "$SOURCE" ]; then # send from stdin
+  SOURCE="-"
+else # send file/directory
+  test -e "$SOURCE" || usage
+  if [ -d "$SOURCE" ]; then # create zip of directory
+    DIRNAME="$(basename "$SOURCE")"
+    zip -r - "$SOURCE" | $CURL -F "file=@\"-\";filename=\"$(curl_escape "$DIRNAME").zip\";type=\"application/zip\"" "$HOST"
+    cat "$CURL_OUT"
+    exit $?
+  fi
+fi
+
+$CURL -# -F "file=@\"$(curl_escape "$SOURCE")\"" "$HOST"
+cat "$CURL_OUT"
